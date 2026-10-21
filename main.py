@@ -23,20 +23,37 @@ st.caption("영화진흥위원회(KOBIS) Open API를 활용하여 한국 시간 
 kst = timezone(timedelta(hours=9))
 now_kst = datetime.now(timezone.utc).astimezone(kst)
 yesterday_kst = now_kst - timedelta(days=1)
-target_dt = yesterday_kst.strftime("%Y%m%d")  # YYYYMMDD 포맷 (예: 20261020)
+target_dt = yesterday_kst.strftime("%Y%m%d")  # YYYYMMDD 포맷
 formatted_date = yesterday_kst.strftime("%Y년 %m월 %d일")
 
 st.info(f"📅 조회 기준일: **{formatted_date}** (어제 기준)")
 
-# (2) Streamlit Secrets에서 API 인증키 불러오기 (.streamlit/secrets.toml 또는 Cloud Secrets 설정)
+# (2) Streamlit Secrets에서 API 인증키 검증 및 불러오기
 if "KOBIS_KEY" not in st.secrets or not st.secrets["KOBIS_KEY"]:
     st.error("🚨 API 인증키(KOBIS_KEY)가 설정되지 않았습니다.")
+    
+    st.subheader("🔑 KOBIS_KEY 설정 가이드")
     st.markdown("""
-    **해결 방법:**
-    1. **로컬 실행 시**: 프로젝트 폴더 안 `.streamlit/secrets.toml` 파일에 `KOBIS_KEY = "발급받은키"` 를 추가해 주세요.
-    2. **Streamlit Cloud 배포 시**: App Settings -> Secrets 메뉴에서 `KOBIS_KEY = "발급받은키"` 를 등록해 주세요.
+    앱을 정상적으로 실행하려면 **KOBIS API 인증키**를 등록해야 합니다.
+
+    ---
+    
+    #### 1. Streamlit Cloud에 배포한 경우 (웹 환경)
+    1. Streamlit Cloud 앱 화면 우측 하단의 **`Settings`** -> **`Secrets`** 메뉴로 이동합니다.
+    2. 입력 창에 아래 형식을 그대로 복사해 넣고 발급받은 키를 입력한 뒤 **`Save`**를 눌러주세요.
+    ```toml
+    KOBIS_KEY = "발급받은_인증키_입력"
+    ```
+
+    #### 2. 로컬 컴퓨터에서 실행 중인 경우 (개발 환경)
+    1. `main.py` 파일과 같은 위치에 **`.streamlit`** 폴더를 만들어 주세요.
+    2. `.streamlit` 폴더 안에 **`secrets.toml`** 파일을 생성해 주세요.
+    3. `secrets.toml` 파일 안에 아래 내용을 작성하고 저장해 주세요.
+    ```toml
+    KOBIS_KEY = "발급받은_인증키_입력"
+    ```
     """)
-    st.stop()  # 키가 없으면 아래 로직을 실행하지 않고 중단
+    st.stop()  # 키가 없으면 아래 로직을 실행하지 않고 여기서 중단
 
 api_key = st.secrets["KOBIS_KEY"]
 
@@ -51,7 +68,7 @@ params = {
 }
 
 try:
-    # API 서버에 GET 요청 보내기 (타임아웃 10초 설정)
+    # API 서버에 GET 요청 보내기 (타임아웃 10초)
     response = requests.get(url, params=params, timeout=10)
     response.raise_for_status()  # HTTP status code 오류 체크 (4xx, 5xx)
     data = response.json()
@@ -76,7 +93,7 @@ if "faultInfo" in data:
     st.error(f"🚨 API 오류 발생: [{fault.get('errorCode', 'UNKNOWN')}] {fault.get('message', '인증 에러가 발생했습니다.')}")
     st.markdown("""
     **확인해 주세요:**
-    - `secrets`에 입력한 `KOBIS_KEY`가 올바른지 확인해 주세요.
+    - Secrets에 등록된 `KOBIS_KEY` 값에 오타나 공백이 없는지 확인해 주세요.
     - 영화진흥위원회 개발자 센터에서 키 발급 및 활성화 상태를 확인해 주세요.
     """)
     st.stop()
@@ -90,7 +107,7 @@ if not daily_list:
     st.markdown("""
     **확인해 주세요:**
     - 아직 집계가 완료되지 않은 시점이거나 데이터 업데이트 전일 수 있습니다.
-    - 날짜 지정 조건(`targetDt`)을 확인해 주세요.
+    - KOBIS API 서버에 데이터 제공 여부를 확인해 주세요.
     """)
     st.stop()
 
@@ -153,7 +170,6 @@ st.markdown("---")
 st.subheader("📊 관객수 상위 5개 영화")
 
 top5_df = df.head(5).copy()
-# Streamlit 막대그래프 x축/y축 설정을 위해 필요한 컬럼만 추출 및 인덱스 지정
 chart_data = top5_df[["movieNm", "audiCnt"]].set_index("movieNm")
 chart_data.columns = ["관객수"]
 
@@ -164,7 +180,6 @@ st.markdown("---")
 # --- [시각화 3] 전체 박스오피스 상세 표 (st.dataframe) ---
 st.subheader("📋 전체 박스오피스 순위표")
 
-# 표에 출력할 컬럼 선택 및 보기 좋은 이름으로 변경
 display_df = df[[
     "rank", 
     "movieNm", 
