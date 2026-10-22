@@ -194,4 +194,107 @@ with tab1:
             for i in range(6, -1, -1):
                 past_date = selected_date - timedelta(days=i)
                 past_dt_str = past_date.strftime("%Y%m%d")
-                df_past, _ = fetch
+                # 오류가 나던 부분을 수정했습니다: fetch_box_office 호출
+                df_past, _ = fetch_box_office(past_dt_str)
+
+                if df_past is not None and not df_past.empty:
+                    match_movie = df_past[df_past["movieNm"] == selected_movie]
+                    if not match_movie.empty:
+                        audi_cnt = match_movie.iloc[0]["audiCnt"]
+                        trend_data.append({"날짜": past_date.strftime("%m/%d"), "관객수": audi_cnt})
+
+            if trend_data:
+                df_trend = pd.DataFrame(trend_data).set_index("날짜")
+                st.line_chart(df_trend, color="#9FA8DA")
+            else:
+                st.caption("최근 7일간의 추이 데이터를 불러올 수 없습니다.")
+
+        st.markdown("---")
+
+        # 전체 박스오피스 순위표
+        st.subheader("📋 전체 박스오피스 순위표")
+        display_df = df_daily[[
+            "rank", "rankChange", "movieNm_formatted", "openDt", "audiCnt", "audiAcc", "scrnCnt"
+        ]].copy()
+        display_df.columns = ["순위", "순위 증감", "영화명", "개봉일", "관객수(명)", "누적관객수(명)", "스크린수(개)"]
+
+        st.dataframe(
+            display_df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "순위": st.column_config.NumberColumn(format="%d"),
+                "관객수(명)": st.column_config.NumberColumn(format="%'d"),
+                "누적관객수(명)": st.column_config.NumberColumn(format="%'d"),
+                "스크린수(개)": st.column_config.NumberColumn(format="%'d")
+            }
+        )
+
+
+# =============================================================================
+# TAB 2: 주간/주말 박스오피스
+# =============================================================================
+with tab2:
+    col_week_date, col_week_type = st.columns([1, 1])
+    with col_week_date:
+        selected_week_date = st.date_input(
+            "📅 조회할 주(Week)의 날짜를 선택하세요",
+            value=yesterday_kst,
+            max_value=yesterday_kst,
+            key="tab2_date"
+        )
+    with col_week_type:
+        week_option = st.radio(
+            "구분 선택",
+            options=["주말 (금~일)", "주간 (월~일)", "주중 (월~목)"],
+            horizontal=True
+        )
+
+    week_gb_map = {"주말 (금~일)": "1", "주간 (월~일)": "0", "주중 (월~목)": "2"}
+    week_target_dt = selected_week_date.strftime("%Y%m%d")
+
+    df_weekly, err_msg_w = fetch_box_office(week_target_dt, week_gb=week_gb_map[week_option])
+
+    if err_msg_w or df_weekly is None:
+        st.warning(f"⚠️ {err_msg_w if err_msg_w else '해당 주간 데이터가 아직 집계 전입니다.'}")
+    else:
+        df_weekly = process_box_office_df(df_weekly)
+
+        # 1위 영화 카드
+        top_movie_w = df_weekly.iloc[0]
+        st.subheader(f"🥇 해당 기간 1위 영화: {top_movie_w['movieNm_formatted']}")
+
+        w_col1, w_col2, w_col3 = st.columns(3)
+        w_col1.metric("기간 관객수", f"{int(top_movie_w['audiCnt']):,} 명", delta=top_movie_w["rankChange"])
+        w_col2.metric("누적 관객수", f"{int(top_movie_w['audiAcc']):,} 명")
+        w_col3.metric("스크린 수", f"{int(top_movie_w['scrnCnt']):,} 개")
+
+        st.markdown("---")
+
+        # 주간 관객수 상위 5개 막대그래프 (파스텔 보라색 적용: #B39DDB)
+        st.subheader(f"📊 {week_option} 관객수 상위 5개 영화")
+        top5_w_df = df_weekly.head(5).copy()
+        chart_data_w = top5_w_df[["movieNm", "audiCnt"]].set_index("movieNm")
+        chart_data_w.columns = ["관객수"]
+        st.bar_chart(chart_data_w, color="#B39DDB")
+
+        st.markdown("---")
+
+        # 주간 순위표
+        st.subheader(f"📋 {week_option} 박스오피스 순위표")
+        display_w_df = df_weekly[[
+            "rank", "rankChange", "movieNm_formatted", "openDt", "audiCnt", "audiAcc", "scrnCnt"
+        ]].copy()
+        display_w_df.columns = ["순위", "순위 증감", "영화명", "개봉일", "관객수(명)", "누적관객수(명)", "스크린수(개)"]
+
+        st.dataframe(
+            display_w_df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "순위": st.column_config.NumberColumn(format="%d"),
+                "관객수(명)": st.column_config.NumberColumn(format="%'d"),
+                "누적관객수(명)": st.column_config.NumberColumn(format="%'d"),
+                "스크린수(개)": st.column_config.NumberColumn(format="%'d")
+            }
+        )
